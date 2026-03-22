@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Citizen — Мониторинг Происшествий</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Manrope:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-dark: #0a0a0f;
+  --bg-panel: #12121a;
+  --bg-card: #1a1a28;
+  --bg-card-hover: #22223a;
+  --border: #2a2a40;
+  --text: #e8e8f0;
+  --text-dim: #8888a8;
+  --text-muted: #55556a;
+  --accent: #ff3b3b;
+  --accent-glow: rgba(255, 59, 59, 0.3);
+  --accent-orange: #ff8c00;
+  --accent-yellow: #ffd000;
+  --accent-blue: #3b8bff;
+  --accent-green: #00d97e;
+  --accent-purple: #a855f7;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Manrope', sans-serif;
+  background: var(--bg-dark);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ─── HEADER ─── */
+.header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 56px;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 1000;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  width: 32px; height: 32px;
+  background: var(--accent);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 0 20px var(--accent-glow);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px var(--accent-glow); }
+  50% { box-shadow: 0 0 35px var(--accent-glow), 0 0 60px rgba(255,59,59,0.1); }
+}
+
+.logo-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.header-stats {
+  display: flex;
+  gap: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.stat-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+.stat-dot.live { background: var(--accent); }
+.stat-dot.active { background: var(--accent-green); }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-report {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+
+.btn-report:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+
+.btn-streamer {
+  background: var(--bg-card);
+  color: var(--accent-purple);
+  border: 1px solid var(--accent-purple);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.btn-streamer:hover {
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.btn-streamer.active {
+  background: var(--accent-purple);
+  color: white;
+}
+
+/* ─── MAIN LAYOUT ─── */
+.main {
+  display: flex;
+  height: 100vh;
+  padding-top: 56px;
+}
+
+/* ─── MAP ─── */
+.map-container {
+  flex: 1;
+  position: relative;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+/* Dark map tiles */
+.leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(1.1) saturate(0.3); }
+.leaflet-control-zoom a {
+  background: var(--bg-panel) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--bg-card) !important;
+  color: var(--text) !important;
+  border-radius: var(--radius) !important;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+}
+.leaflet-popup-tip { background: var(--bg-card) !important; }
+.leaflet-popup-content { margin: 12px 16px !important; font-family: 'Manrope', sans-serif; }
+
+/* ─── SIDEBAR ─── */
+.sidebar {
+  width: 380px;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-title {
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.filter-tab {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  font-family: 'Manrope', sans-serif;
+}
+
+.filter-tab:hover { border-color: var(--text-dim); }
+.filter-tab.active { background: var(--text); color: var(--bg-dark); border-color: var(--text); }
+
+.feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.feed::-webkit-scrollbar { width: 4px; }
+.feed::-webkit-scrollbar-track { background: transparent; }
+.feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.incident-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.incident-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+}
+
+.incident-card:hover {
+  background: var(--bg-card-hover);
+  border-color: #3a3a55;
+  transform: translateX(-2px);
+}
+
+.incident-card.type-fire::before { background: var(--accent); }
+.incident-card.type-accident::before { background: var(--accent-orange); }
+.incident-card.type-suspicious::before { background: var(--accent-yellow); }
+.incident-card.type-crime::before { background: var(--accent); }
+.incident-card.type-medical::before { background: var(--accent-blue); }
+.incident-card.type-other::before { background: var(--text-dim); }
+
+.card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.card-type {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.type-fire .card-type { background: rgba(255,59,59,0.15); color: var(--accent); }
+.type-accident .card-type { background: rgba(255,140,0,0.15); color: var(--accent-orange); }
+.type-suspicious .card-type { background: rgba(255,208,0,0.15); color: var(--accent-yellow); }
+.type-crime .card-type { background: rgba(255,59,59,0.15); color: var(--accent); }
+.type-medical .card-type { background: rgba(59,139,255,0.15); color: var(--accent-blue); }
+.type-other .card-type { background: rgba(136,136,168,0.15); color: var(--text-dim); }
+
+.card-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.card-desc {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.card-address {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-votes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vote-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  transition: color 0.2s;
+}
+
+.vote-btn:hover { color: var(--text); }
+.vote-btn.voted { color: var(--accent-green); }
+
+.streamer-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--accent-purple);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+}
+
+.btn-go {
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--accent-purple);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Manrope', sans-serif;
+  transition: all 0.2s;
+}
+
+.btn-go:hover {
+  background: var(--accent-purple);
+  color: white;
+}
+
+/* ─── MODAL ─── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px);
+  z-index: 2000;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 440px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+  animation: modal-in 0.3s ease;
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: none; }
+}
+
+.modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-title {
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 24px;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.modal-close:hover { background: var(--bg-card); color: var(--text); }
+
+.modal-body { padding: 20px 24px; }
+
+.form-group { margin-bottom: 16px; }
+
+.form-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.type-option {
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Manrope', sans-serif;
+}
+
+.type-option:hover { border-color: var(--text-dim); }
+
+.type-option.selected { border-color: var(--accent); background: rgba(255,59,59,0.08); }
+
+.type-option-icon { font-size: 24px; margin-bottom: 4px; }
+.type-option-label { font-size: 11px; font-weight: 700; }
+
+.form-input {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: 'Manrope', sans-serif;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus { outline: none; border-color: var(--accent); }
+
+.form-input::placeholder { color: var(--text-muted); }
+
+.location-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  font-style: italic;
+}
+
+.modal-footer {
+  padding: 16px 24px 20px;
+}
+
+.btn-submit {
+  width: 100%;
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 14px;
+  border-radius: var(--radius);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px var(--accent-glow);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.btn-submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 30px var(--accent-glow);
+}
+
+.btn-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ─── MAP CLICK INDICATOR ─── */
+.map-crosshair {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: calc(50% - 190px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 800;
+  text-align: center;
+}
+
+.map-crosshair.active { display: block; }
+
+.crosshair-ring {
+  width: 60px; height: 60px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  margin: 0 auto 8px;
+  animation: crosshair-pulse 1.5s ease-in-out infinite;
+  position: relative;
+}
+
+.crosshair-ring::before, .crosshair-ring::after {
+  content: '';
+  position: absolute;
+  background: var(--accent);
+}
+
+.crosshair-ring::before {
+  width: 2px; height: 16px;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.crosshair-ring::after {
+  width: 16px; height: 2px;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes crosshair-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.6; }
+}
+
+.crosshair-text {
+  background: var(--accent);
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ─── CUSTOM MARKERS ─── */
+.custom-marker {
+  position: relative;
+}
+
+.marker-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  border: 2px solid rgba(255,255,255,0.2);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.marker-icon:hover { transform: scale(1.2); }
+
+.marker-icon.fire { background: var(--accent); }
+.marker-icon.accident { background: var(--accent-orange); }
+.marker-icon.suspicious { background: var(--accent-yellow); }
+.marker-icon.crime { background: var(--accent); }
+.marker-icon.medical { background: var(--accent-blue); }
+.marker-icon.other { background: var(--text-dim); }
+
+.marker-pulse {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  animation: marker-pulse-anim 2s ease-out infinite;
+}
+
+.marker-pulse.fire { background: var(--accent); }
+.marker-pulse.accident { background: var(--accent-orange); }
+.marker-pulse.suspicious { background: var(--accent-yellow); }
+.marker-pulse.crime { background: var(--accent); }
+.marker-pulse.medical { background: var(--accent-blue); }
+
+@keyframes marker-pulse-anim {
+  0% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(3); }
+}
+
+/* ─── TOAST ─── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 12px 24px;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 14px;
+  z-index: 3000;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ─── NO INCIDENTS ─── */
+.empty-feed {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+
+.empty-feed-icon { font-size: 40px; margin-bottom: 12px; }
+.empty-feed-text { font-size: 14px; line-height: 1.6; }
+
+/* ─── POPUP CONTENT ─── */
+.popup-type {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.popup-desc {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.popup-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .header-stats { display: none; }
+  .map-crosshair { left: 50%; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div class="logo-text">Citizen</div>
+  </div>
+  <div class="header-stats">
+    <div class="stat">
+      <div class="stat-dot live"></div>
+      <span id="liveCount">0</span> активных
+    </div>
+    <div class="stat">
+      <div class="stat-dot active"></div>
+      <span id="streamerCount">0</span> стримеров
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn-streamer" id="btnStreamer" onclick="toggleStreamer()">
+      📡 Режим стримера
+    </button>
+    <button class="btn-report" onclick="startReport()">
+      ＋ Сообщить
+    </button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="map-container">
+    <div id="map"></div>
+    <div class="map-crosshair" id="crosshair">
+      <div class="crosshair-ring"></div>
+      <div class="crosshair-text">Нажмите на карту для выбора места</div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">📡 Лента событий</div>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted)" id="feedCount">0</span>
+    </div>
+    <div class="filter-tabs" id="filterTabs">
+      <div class="filter-tab active" data-filter="all" onclick="setFilter('all',this)">Все</div>
+      <div class="filter-tab" data-filter="fire" onclick="setFilter('fire',this)">🔥 Пожар</div>
+      <div class="filter-tab" data-filter="accident" onclick="setFilter('accident',this)">🚗 ДТП</div>
+      <div class="filter-tab" data-filter="suspicious" onclick="setFilter('suspicious',this)">👁 Подозр.</div>
+      <div class="filter-tab" data-filter="crime" onclick="setFilter('crime',this)">🚨 Крим.</div>
+      <div class="filter-tab" data-filter="medical" onclick="setFilter('medical',this)">🏥 Мед.</div>
+    </div>
+    <div class="feed" id="feed"></div>
+  </div>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="reportModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Новое происшествие</div>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Тип происшествия</label>
+        <div class="type-grid">
+          <div class="type-option" data-type="fire" onclick="selectType(this)">
+            <div class="type-option-icon">🔥</div>
+            <div class="type-option-label">Пожар</div>
+          </div>
+          <div class="type-option" data-type="accident" onclick="selectType(this)">
+            <div class="type-option-icon">🚗</div>
+            <div class="type-option-label">ДТП</div>
+          </div>
+          <div class="type-option" data-type="suspicious" onclick="selectType(this)">
+            <div class="type-option-icon">👁️</div>
+            <div class="type-option-label">Подозрит.</div>
+          </div>
+          <div class="type-option" data-type="crime" onclick="selectType(this)">
+            <div class="type-option-icon">🚨</div>
+            <div class="type-option-label">Криминал</div>
+          </div>
+          <div class="type-option" data-type="medical" onclick="selectType(this)">
+            <div class="type-option-icon">🏥</div>
+            <div class="type-option-label">Мед. помощь</div>
+          </div>
+          <div class="type-option" data-type="other" onclick="selectType(this)">
+            <div class="type-option-icon">📌</div>
+            <div class="type-option-label">Другое</div>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Описание</label>
+        <textarea class="form-input" id="descInput" rows="3" placeholder="Что произошло?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Адрес (необязательно)</label>
+        <input class="form-input" id="addressInput" placeholder="ул. Тверская, д. 1">
+        <div class="location-hint" id="locationHint">📍 Или нажмите на карту для выбора точки</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-submit" id="btnSubmit" onclick="submitReport()" disabled>
+        Отправить сообщение
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+let incidents = [];
+let markers = {};
+let isStreamer = false;
+let isPlacingPin = false;
+let selectedType = null;
+let selectedLatLng = null;
+let currentFilter = 'all';
+let votedSet = new Set();
+
+const TYPES = {
+  fire: { label: 'Пожар', icon: '🔥', color: '#ff3b3b' },
+  accident: { label: 'ДТП', icon: '🚗', color: '#ff8c00' },
+  suspicious: { label: 'Подозрительное', icon: '👁️', color: '#ffd000' },
+  crime: { label: 'Криминал', icon: '🚨', color: '#ff3b3b' },
+  medical: { label: 'Мед. помощь', icon: '🏥', color: '#3b8bff' },
+  other: { label: 'Другое', icon: '📌', color: '#8888a8' }
+};
+
+const map = L.map('map', {
+  center: [55.7558, 37.6173],
+  zoom: 12,
+  zoomControl: true,
+  attributionControl: false
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: ''
+}).addTo(map);
+
+map.on('click', function(e) {
+  if (isPlacingPin) {
+    selectedLatLng = e.latlng;
+    document.getElementById('locationHint').innerHTML = 
+      `✅ Точка выбрана: ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+    isPlacingPin = false;
+    document.getElementById('crosshair').classList.remove('active');
+    document.getElementById('map').style.cursor = '';
+    validateForm();
+  }
+});
+
+async function loadIncidents() {
+  try {
+    if (window.storage && window.storage.get) {
+      const result = await window.storage.get('citizen-incidents', true);
+      if (result && result.value) {
+        incidents = JSON.parse(result.value);
+        const now = Date.now();
+        incidents = incidents.filter(i => now - i.timestamp < 86400000);
+      }
+    } else {
+      const local = localStorage.getItem('citizen-incidents');
+      if (local) {
+        incidents = JSON.parse(local);
+        const now = Date.now();
+        incidents = incidents.filter(i => now - i.timestamp < 86400000);
+      }
+    }
+  } catch (e) {
+    incidents = [];
+  }
+  renderAll();
+}
+
+async function saveIncidents() {
+  try {
+    if (window.storage && window.storage.set) {
+      await window.storage.set('citizen-incidents', JSON.stringify(incidents), true);
+    } else {
+      localStorage.setItem('citizen-incidents', JSON.stringify(incidents));
+    }
+  } catch (e) {
+    console.error('Storage error:', e);
+  }
+}
+
+function renderAll() {
+  renderFeed();
+  renderMarkers();
+  updateStats();
+}
+
+function renderFeed() {
+  const feed = document.getElementById('feed');
+  let filtered = currentFilter === 'all' 
+    ? [...incidents] 
+    : incidents.filter(i => i.type === currentFilter);
+  
+  filtered.sort((a, b) => b.timestamp - a.timestamp);
+  
+  document.getElementById('feedCount').textContent = filtered.length;
+
+  if (filtered.length === 0) {
+    feed.innerHTML = `
+      <div class="empty-feed">
+        <div class="empty-feed-icon">📡</div>
+        <div class="empty-feed-text">
+          Нет активных происшествий.<br>
+          Нажмите <strong>＋ Сообщить</strong>, чтобы<br>добавить первое событие.
+        </div>
+      </div>`;
+    return;
+  }
+
+  feed.innerHTML = filtered.map(inc => {
+    const t = TYPES[inc.type] || TYPES.other;
+    const ago = timeAgo(inc.timestamp);
+    const hasStreamer = inc.streamer;
+    const voted = votedSet.has(inc.id);
+
+    return `
+      <div class="incident-card type-${inc.type}" onclick="flyTo(${inc.lat}, ${inc.lng})">
+        <div class="card-top">
+          <div class="card-type">${t.icon} ${t.label}</div>
+          <div class="card-time">${ago}</div>
+        </div>
+        <div class="card-desc">${escHtml(inc.description)}</div>
+        ${inc.address ? `<div class="card-address">📍 ${escHtml(inc.address)}</div>` : ''}
+        <div class="card-footer">
+          <div class="card-votes">
+            <button class="vote-btn ${voted ? 'voted' : ''}" onclick="event.stopPropagation(); upvote('${inc.id}')">
+              ▲ ${inc.votes || 0}
+            </button>
+            <button class="vote-btn" style="color:var(--text-muted)" onclick="event.stopPropagation();">
+              💬 ${inc.comments || 0}
+            </button>
+          </div>
+          ${hasStreamer 
+            ? `<div class="streamer-badge">📡 Стример на месте</div>`
+            : isStreamer 
+              ? `<button class="btn-go" onclick="event.stopPropagation(); claimStreamer('${inc.id}')">🎥 Выезжаю</button>` 
+              : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderMarkers() {
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
+
+  incidents.forEach(inc => {
+    const t = TYPES[inc.type] || TYPES.other;
+    
+    const icon = L.divIcon({
+      className: 'custom-marker',
+      html: `
+        <div class="marker-pulse ${inc.type}"></div>
+        <div class="marker-icon ${inc.type}">${t.icon}</div>
+      `,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18]
+    });
+
+    const marker = L.marker([inc.lat, inc.lng], { icon }).addTo(map);
+    
+    marker.bindPopup(`
+      <div class="popup-type" style="color:${t.color}">${t.icon} ${t.label}</div>
+      <div class="popup-desc">${escHtml(inc.description)}</div>
+      ${inc.address ? `<div style="font-size:12px;color:var(--text-dim);margin:4px 0;">📍 ${escHtml(inc.address)}</div>` : ''}
+      <div class="popup-time">${timeAgo(inc.timestamp)}${inc.streamer ? ' · 📡 Стример на месте' : ''}</div>
+    `);
+
+    markers[inc.id] = marker;
+  });
+}
+
+function updateStats() {
+  document.getElementById('liveCount').textContent = incidents.length;
+  const streamers = incidents.filter(i => i.streamer).length;
+  document.getElementById('streamerCount').textContent = streamers;
+}
+
+function startReport() {
+  document.getElementById('reportModal').classList.add('open');
+  selectedType = null;
+  selectedLatLng = null;
+  document.getElementById('descInput').value = '';
+  document.getElementById('addressInput').value = '';
+  document.getElementById('locationHint').innerHTML = '📍 Или нажмите на карту для выбора точки';
+  document.querySelectorAll('.type-option').forEach(o => o.classList.remove('selected'));
+  document.getElementById('btnSubmit').disabled = true;
+  
+  isPlacingPin = true;
+  document.getElementById('crosshair').classList.add('active');
+  document.getElementById('map').style.cursor = 'crosshair';
+}
+
+function closeModal() {
+  document.getElementById('reportModal').classList.remove('open');
+  isPlacingPin = false;
+  document.getElementById('crosshair').classList.remove('active');
+  document.getElementById('map').style.cursor = '';
+}
+
+function selectType(el) {
+  document.querySelectorAll('.type-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedType = el.dataset.type;
+  validateForm();
+}
+
+function validateForm() {
+  const desc = document.getElementById('descInput').value.trim();
+  const hasLocation = selectedLatLng || document.getElementById('addressInput').value.trim();
+  document.getElementById('btnSubmit').disabled = !(selectedType && desc && hasLocation);
+}
+
+document.getElementById('descInput').addEventListener('input', validateForm);
+document.getElementById('addressInput').addEventListener('input', validateForm);
+
+async function submitReport() {
+  const desc = document.getElementById('descInput').value.trim();
+  const address = document.getElementById('addressInput').value.trim();
+  
+  let lat, lng;
+  if (selectedLatLng) {
+    lat = selectedLatLng.lat;
+    lng = selectedLatLng.lng;
+  } else {
+    const center = map.getCenter();
+    lat = center.lat + (Math.random() - 0.5) * 0.02;
+    lng = center.lng + (Math.random() - 0.5) * 0.02;
+  }
+
+  const incident = {
+    id: 'inc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+    type: selectedType,
+    description: desc,
+    address: address,
+    lat: lat,
+    lng: lng,
+    timestamp: Date.now(),
+    votes: 1,
+    comments: 0,
+    streamer: false
+  };
+
+  incidents.push(incident);
+  await saveIncidents();
+  renderAll();
+  closeModal();
+  showToast(`${TYPES[selectedType].icon} Происшествие добавлено`);
+  map.flyTo([lat, lng], 15, { duration: 1 });
+}
+
+function toggleStreamer() {
+  isStreamer = !isStreamer;
+  const btn = document.getElementById('btnStreamer');
+  btn.classList.toggle('active', isStreamer);
+  btn.innerHTML = isStreamer ? '📡 Стример: ВКЛ' : '📡 Режим стримера';
+  showToast(isStreamer ? '📡 Режим стримера активирован' : 'Режим стримера выключен');
+  renderFeed();
+}
+
+async function claimStreamer(id) {
+  const inc = incidents.find(i => i.id === id);
+  if (inc) {
+    inc.streamer = true;
+    await saveIncidents();
+    renderAll();
+    showToast('🎥 Вы отмечены как стример на этом событии');
+    map.flyTo([inc.lat, inc.lng], 16, { duration: 1 });
+  }
+}
+
+async function upvote(id) {
+  if (votedSet.has(id)) return;
+  votedSet.add(id);
+  const inc = incidents.find(i => i.id === id);
+  if (inc) {
+    inc.votes = (inc.votes || 0) + 1;
+    await saveIncidents();
+    renderFeed();
+  }
+}
+
+function flyTo(lat, lng) {
+  map.flyTo([lat, lng], 16, { duration: 0.8 });
+}
+
+function setFilter(filter, el) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderFeed();
+}
+
+function timeAgo(ts) {
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return 'только что';
+  if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
+  return 'вчера';
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.innerHTML = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+async function seedDemoData() {
+  if (incidents.length > 0) return;
+  
+  const demoIncidents = [
+    {
+      id: 'demo_1', type: 'fire',
+      description: 'Сильное задымление на верхних этажах жилого дома',
+      address: 'Тверская ул., 15',
+      lat: 55.7645, lng: 37.6050,
+      timestamp: Date.now() - 1200000, votes: 12, comments: 3, streamer: true
+    },
+    {
+      id: 'demo_2', type: 'accident',
+      description: 'Столкновение двух автомобилей, движение затруднено',
+      address: 'Садовое кольцо, у м. Маяковская',
+      lat: 55.7699, lng: 37.5945,
+      timestamp: Date.now() - 3600000, votes: 8, comments: 5, streamer: false
+    },
+    {
+      id: 'demo_3', type: 'suspicious',
+      description: 'Подозрительный пакет у входа в метро',
+      address: 'м. Охотный Ряд',
+      lat: 55.7574, lng: 37.6153,
+      timestamp: Date.now() - 7200000, votes: 24, comments: 11, streamer: true
+    },
+    {
+      id: 'demo_4', type: 'medical',
+      description: 'Человеку стало плохо на остановке, нужна помощь',
+      address: 'Новый Арбат, 21',
+      lat: 55.7530, lng: 37.5870,
+      timestamp: Date.now() - 900000, votes: 6, comments: 2, streamer: false
+    },
+    {
+      id: 'demo_5', type: 'crime',
+      description: 'Кража велосипеда у торгового центра, подозреваемый скрылся',
+      address: 'ТЦ Европейский, пл. Киевского вокзала',
+      lat: 55.7441, lng: 37.5671,
+      timestamp: Date.now() - 5400000, votes: 15, comments: 7, streamer: false
+    }
+  ];
+
+  incidents = demoIncidents;
+  await saveIncidents();
+  renderAll();
+}
+
+setInterval(async () => {
+  await loadIncidents();
+}, 10000);
+
+loadIncidents().then(() => {
+  seedDemoData();
+});
+</script>
+</body>
+</html>
